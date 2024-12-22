@@ -1,0 +1,121 @@
+---
+title: "02_Uncertainty: week 2"
+output: html_document
+date: "2024-12-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting the data and working directory:
+```{r dataset}
+setwd("/Users/carmencilla/Desktop/Master EUR/Block 2/Data Science and HR Analytics/FEM11213-Coronas/")
+browser <- read.csv("Data/web-browsers.csv")
+dim(browser)
+head(browser)
+```
+## BH Algorithm 
+In this lecture, BH Algorithm.
+Multi-hypothesis testing. Pick a target value for q (0.1). Obtain p-values, re-order p and compute largest i such that: 
+(p(i) =< i/m * q) = k. Reject H(i) for all i up to k. 
+
+Note:this procedure substitutes signficance level!! So no need to check for significance. 
+
+## Example 1: browse dataset
+
+```{r BH Algorithm}
+spendy <- glm(log(spend) ~ . -id, data=browser)
+  round(summary(spendy)$coef,2)
+```
+Comments:  
+All variables significant except controls for race.  
+Issue with this method: sometimes slope too close to zero: therefore, sometimes useless procedure... 
+
+
+```{r }
+pval <- summary(spendy)$coef[-1, "Pr(>|t|)"]
+  pvalrank <- rank(pval)
+  reject <- ifelse(pval< (0.1/9)*pvalrank, 2, 1) 
+  
+  print(pval)
+  print(reject)
+```
+
+
+## Example 2: semiconductor dataset
+Context of the example: we wanna look if the chip fails. 
+
+```{r data for example 2}
+SC <- read.csv("../Data/semiconductor.csv")
+dim(SC)
+head(SC)
+```
+
+SC: More columns (201)
+
+```{r regression}
+full_sc <- glm(FAIL ~ ., data=SC, family=binomial)
+pvals_sc <- summary(full)$coef[-1,4] #-1 to drop the intercept
+print(pvals_sc)
+```
+
+```{r histogram for pvalues}
+hist(pvals_sc, xlab="p-value", main="", col="lightblue")
+```
+
+Pvalues ranged between 0-1. 
+
+```{r setting the cut}
+fdr_cut <- function(pvals_sc, q=0.1){ ## The FDR threshold (e.g., 0.1 means a 10% FDR is allowed).
+  pvals_sc <- sort(pvals_sc[!is.na(pvals_sc)]) #Sort and Filter P-Values: essential for the BH algorithm!!
+  N <- length(pvals_sc) #Total number of p-values after removing NA.
+  k <- rank(pvals_sc, ties.method="min") #Ranks of the p-values (from smallest to largest). Assigns the smallest rank to tied values.
+  alpha_sc <- max(pvals_sc[ pvals_sc<= (q*k/(N+1)) ]) #alpha_sc = the largest p-value below the BH-adjusted threshold. BH condition!! 
+  
+  plot(pvals_sc, log="xy", xlab="order", main=sprintf("FDR of %g",q),  ## log-log plot to visualize results!!
+   ylab="p-value", bty="n", col=c(8,2)[(pvals_sc<=alpha_sc) + 1], pch=20)
+  lines(1:N, q*(1:N)/(N+1)) ## Line representing the BH threshold
+
+  return(alpha_sc)
+}
+
+fdr_cut(pvals_sc)
+```
+## Interpreting the graph: 
+  Red dots interpretation: we aim to have a simpler model (regularization). We use this regression to remove coefficients. Simple way of selection. 
+  In the histogram, we saw many coefficients with pvalues being 0!! This means many significant coefficients!!
+  Binomial model. 
+
+## Understanding the difference between pvalue and FDR:
+  - PValue: we aree sure that every individual observations has a 5% chance of being false positive. This is, 5% limit
+  to reject H0. 5% chance of have Type I Error. More trials, significant increase in FP. 
+  - FDR: controls for the FP among the significant results. We allow for a 10% of results on average neing false
+  positive. FDR does not account for individual chances of FP. 
+  
+  This means that, if we have 100 and 20 of them are significant, 10% of them are potential FP (2 out of 20). 
+
+```{r experiment BH}  
+full_sc2 <- glm(FAIL ~ ., data=SC, family=binomial)
+pvals_sc2 <- summary(full)$coef[-1,4] #-1 to drop the intercept
+print(pvals_sc2)
+```
+
+```{r setting the cut 2}
+fdr_cut2 <- function(pvals_sc2, q=0.01){ ## The FDR threshold (e.g., 0.1 means a 10% FDR is allowed).
+  pvals_sc2 <- sort(pvals_sc2[!is.na(pvals_sc2)]) #Sort and Filter P-Values: essential for the BH algorithm!!
+  N2 <- length(pvals_sc2) #Total number of p-values after removing NA.
+  k2 <- rank(pvals_sc2, ties.method="min") #Ranks of the p-values (from smallest to largest). Assigns the smallest rank to tied values.
+  alpha_sc2 <- max(pvals_sc2[ pvals_sc2<= (q*k2/(N2+1)) ]) #alpha_sc = the largest p-value below the BH-adjusted threshold. BH condition!! 
+  
+  plot(pvals_sc2, log="xy", xlab="order", main=sprintf("FDR of %g",q),  ## log-log plot to visualize results!!
+   ylab="p-value", bty="n", col=c(8,2)[(pvals_s2c<=alpha_sc2) + 1], pch=20)
+  lines(1:N2, q*(1:N2)/(N2+1)) ## Line representing the BH threshold
+
+  return(alpha_sc2)
+}
+
+fdr_cut2(pvals_sc2)
+```
+
+Lowering the q, we diminish the threshold to accept non-zero coefficients, therefore accepting less coefficients. 

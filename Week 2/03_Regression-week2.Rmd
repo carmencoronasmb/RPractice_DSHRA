@@ -1,0 +1,113 @@
+---
+title: "03. Regression"
+output: html_document
+date: "2024-12-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Regression. Orange juice example. 
+
+```{r head oj}
+oj <- read.csv("../Data/oj.csv")
+head(oj, n=5)
+```
+
+```{r tail oj}
+tail(oj, n=5)
+```
+```{r sum brands}
+unique(oj$brand)
+```
+There are three brands: Tropicana, Minute Maid and Dominicks. 
+
+```{r regression brand price}
+glm(log(sales) ~ brand + log(price), data=oj)
+```
+We obtain partial effect of price on sales. It is distributed also with the effect per brand.
+Dominicks is reference category. 
+- Increase of 1.52 log points in sales when you change from Dominicks to Tropicana. 
+- Decrease of 3.13% when increasing price 1%. Really elastic demand. 
+
+R creates a matrix in the background to predict sales: 
+```{r matrix regression}
+x <- model.matrix(~ brand + log(price), data=oj); head(x); tail(x)
+```
+
+```{r asfactor}
+oj$brand = as.factor(oj$brand) #provides level per variable 
+x <- model.matrix(~ brand + log(price), data=oj); head(x)
+```
+We are changing the reference brand. We are also trying to use "Minute Maid" as reference category. 
+```{r relevel}
+oj$mybrand = relevel(oj$brand, "minute.maid") #Using relevel to change the variable. 
+x <- model.matrix(~ mybrand + log(price), data=oj); head(x)
+```
+
+```{r relevel 2}
+oj$mybrand = relevel(oj$brand, "tropicana") #Using relevel to change the variable. 
+x <- model.matrix(~ mybrand + log(price), data=oj); head(x)
+```
+Log(price) still provides the same value. 
+
+We are regressing sales on price interacting with brand and feat. Feat is a variable computing whether or not the brand is featured in the store.   
+```{r elasticity regression}
+glm(log(sales) ~ log(price)*brand*feat, data=oj)
+```
+Mg effect of price is captured in -2.77. For Minute Maid:  
+  - When not featured: from the baseline (log(price) = -2.77), we add the effect of minute.maid (0.7829). Therefore, effect of minute maid when not featured is -2.77 + 0.7829. Therefore, minute.maid have a more inelastic demand.  
+  - When featured, from the baseline (log(price) and log(price):feat), we have to sum coefficients for minute.maid. That is, -2.77 + -0.47 + 0.78 + -1.11. 
+  
+Note: gml command also provides deviance measures such as AIC and D0 (null deviance).
+
+## Logistic regression. Email example. 
+
+Email Dataset
+```{r email example}
+email <- read.csv("../Data/spam.csv")
+dim(email)
+colnames(email)
+```
+
+```{r regession on all coef}
+spam <- glm(spam ~ ., data=email, family='binomial')
+```
+
+Note: there is a typo in the code in the slides. coef(spammy) is not the correct notation. As it is referencing the previous regression, coef(spam) would be the correct notation. 
+
+```{r word free}
+coef(spam)["word_free"]; exp(coef(spam)["word_free"])
+```
+Interpretation: finding the word "free" increases the odds of being spam by a factor of 4.67. 
+
+```{r word george}
+coef(spam)["word_george"]; exp(coef(spam)["word_george"]); 1/exp(coef(spam)["word_george"])
+```
+Interpretation: finding the word "george" decreases the odds of being spam by a factor of 323. 
+
+```{r word meeting}
+coef(spam)["word_meeting"]; exp(coef(spam)["word_meeting"]); 1/exp(coef(spam)["word_meeting"])
+```
+Interpretation: finding the word "meeting" decreases the odds of being spam by a factor of 12. 
+
+```{r predict}
+predict(spam, newdata = email[c(1,4000, 555),], type="response")
+```
+I expand lecture predictions adding and interpreting one more email. Mail 555 is predicted as spam, with a higher probability than mail 1. 
+
+## Deviance and Likelihood. Email example. 
+```{r deviance}
+summary(spam)$deviance
+summary(spam)$null.deviance
+```
+
+Example: in this case we are computating R2 using its generalized formula. 
+
+```{r R2}
+D <- summary(spam)$deviance; D #deviance of the fitted with respect to the saturated (perfect) model.  
+D0 <- summary(spam)$null.deviance; D0 #deviance of the null with respect to the saturated (perfect) model.  
+R2 <- 1 - D/D0; R2 #ratio of the fitted deviance respect to the null, which serves as a benchmark. 
+```
+Quality of adjustment (goodness of fit) using all covariates = 74%

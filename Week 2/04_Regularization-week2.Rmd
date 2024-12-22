@@ -1,0 +1,304 @@
+---
+title: "04. Regularization"
+author: "Carmen Coronas"
+output: html_document
+date: "2024-12-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Cross Validation Example
+```{r Cross Validation}
+SC <- read.csv("../Data/semiconductor.csv")
+full <- glm(FAIL ~ ., data=SC, family=binomial)
+1 - full$deviance/full$null.deviance
+```
+R2 = 56% of variance explained (R2 IS). 
+
+Step 1- K-fold functions
+```{r Step 1}
+## Out of sample prediction experiment
+## pred must be probabilities (0<pred<1) for binomial
+deviance <- function(y, pred, family=c("gaussian","binomial")){
+    family <- match.arg(family)
+    if(family=="gaussian"){
+        return( sum( (y-pred)^2 ) )
+    }else{
+        if(is.factor(y)) y <- as.numeric(y)>1
+        return( -2*sum( y*log(pred) + (1-y)*log(1-pred) ) )
+    }
+}
+## get null deviance too, and return R2
+R2 <- function(y, pred, family=c("gaussian","binomial")){
+    fam <- match.arg(family)
+    if(fam=="binomial"){
+        if(is.factor(y)){ y <- as.numeric(y)>1 }
+    }
+    dev <- deviance(y, pred, family=fam)
+    dev0 <- deviance(y, mean(y), family=fam) # Instead of using mean, we use median. 
+    return(1-dev/dev0)
+}
+```
+
+Step 2- K-Fold Partition/Experiment
+```{r step 2}
+# setup the experiment
+n <- nrow(SC) # the number of observations
+K <- 10 # the number of `folds'
+# create a vector of fold memberships (random order)
+foldid <- rep(1:K,each=ceiling(n/K))[sample(1:n)]
+# create an empty dataframe of results
+Out <- data.frame(full=rep(NA,K)) 
+# use a for loop to run the experiment
+for(k in 1:K){ 
+    train <- which(foldid!=k) # train on all but fold `k'
+    ## fit regression on full sample
+    rfull <- glm(FAIL~., data=SC, subset=train, family=binomial)
+    ## get prediction: type=response so we have probabilities
+    predfull <- predict(rfull, newdata=SC[-train,], type="response")
+    ## calculate and log R2
+    Out$full[k] <- R2(y=SC$FAIL[-train], pred=predfull, family="binomial")
+    ## print progress
+    cat(k, " ")
+}
+```
+
+Step 3- K-Fold Plots
+```{r step 3}
+boxplot(Out, col="plum", ylab="R2")
+```
+
+
+```{r OOS R2}
+## what are the average Out R2?
+colMeans(Out)
+```
+Negative OOS R2. Overfitting: excessively adjusted to IS data, performs poorly in OOS data. 
+  
+We repeat KFOLD for K = 5 instead of 10. 
+Step 1- K-fold functions
+```{r Step 1 new}
+## Out of sample prediction experiment
+## first, define the deviance and R2 functions
+## pred must be probabilities (0<pred<1) for binomial
+deviance_2 <- function(y, pred, family=c("gaussian","binomial")){
+    family_2 <- match.arg(family)
+    if(family=="gaussian"){
+        return( sum( (y-pred)^2 ) )
+    }else{
+        if(is.factor(y)) y <- as.numeric(y)>1
+        return( -2*sum( y*log(pred) + (1-y)*log(1-pred) ) )
+    }
+}
+## get null devaince too, and return R2
+R2_2 <- function(y, pred, family=c("gaussian","binomial")){
+    fam2 <- match.arg(family)
+    if(fam=="binomial"){
+        if(is.factor(y)){ y <- as.numeric(y)>1 }
+    }
+    dev_2 <- deviance(y, pred, family=fam)
+    dev0_2 <- deviance(y, mean(y), family=fam)
+    return(1-dev/dev0)
+}
+```
+
+Step 2- K-Fold Partition/Experiment
+```{r step 2 new}
+# setup the experiment
+n_2 <- nrow(SC) # the number of observations
+K_2 <- 5 # the number of folds: 5 NOW!!
+# create a vector of fold memberships (random order)
+foldid_2 <- rep(1:K,each=ceiling(n/K))[sample(1:n)]
+# create an empty dataframe of results
+Out_2 <- data.frame(full=rep(NA,K)) 
+# use a for loop to run the experiment
+for(k in 1:K){ 
+    train_2 <- which(foldid!=k) # train on all but fold `k'
+    ## fit regression on full sample
+    rfull_2 <- glm(FAIL~., data=SC, subset=train_2, family=binomial)
+    ## get prediction: type=response so we have probabilities
+    predfull_2 <- predict(rfull, newdata=SC[-train_2,], type="response")
+    ## calculate and log R2
+    Out_2$full[k] <- R2(y=SC$FAIL[-train_2], pred=predfull, family="binomial")
+    ## print progress
+    cat(k, " ")
+}
+```
+
+Step 3- K-Fold Plots
+```{r step 3 new}
+boxplot(Out_2, col="plum", ylab="R2")
+```
+
+```{r OOS R2 new}
+## what are the average Out R2?
+colMeans(Out_2)
+```
+
+In this case, less folds (5) results in a worse adjustment. R2 = -5.7. 
+
+## Regularization paths
+## Forward Stepwise Regression
+```{r forward stepwise}
+null <- glm(FAIL~1, data=SC)
+fwd <- step(null, scope=formula(full), dir="forward")
+```
+
+## Conclusions on Forward Stepwise Regression
+Computationally intensive. Starts from univariate model, inlcuding covariates one by one (criterion: highest R2). 
+
+## Graph: sparsity decreases with number of covariates (p)  
+```{r sparsity}
+calculate_sparsity_bound <- function(p, N, alpha) { return(alpha * sqrt(N) / sqrt(p))}#Define a function to calculate the sparsity bound
+
+N <- 100#Set parameters
+
+alpha <- 1000#Set parameters
+
+p_values <- seq(1, 100, by = 1) ##Set parameters. Adjust the range of p as needed
+
+bound_values <- sapply(p_values, calculate_sparsity_bound, N = N, alpha = alpha)# Calculate sparsity bounds for each p
+
+kink_point <- which.min(diff(bound_values)) + 1# Identify the kink point
+
+plot(p_values, bound_values, type = "l", col = "blue", lwd = 2, xlab = "Number of Covariates (p)", ylab = "Sparsity Bound", main = "Sparsity Bound vs. Number of Covariates", ylim = c(0, max(bound_values)))# Plot the sparsity bounds
+
+points(p_values[kink_point], bound_values[kink_point], col = "red", pch = 16)# Highlight the kink point
+
+text(p_values[kink_point], bound_values[kink_point], "Kink", pos = 4, col = "red")# Highlight the kink point
+
+legend("topright", legend = sprintf("Alpha = %d", alpha), col = "blue", lwd = 2)# Add a legend
+
+```
+
+## Lasso regularization path
+
+```{r setting lasso}
+library(gamlr)
+## Browsing History. 
+## web has 3 colums: [machine] id, site [id], [# of] visits
+web <- read.csv("../Data/browser-domains.csv")
+## Read in actual website names and relabel site factor
+sitenames <- scan("../Data/browser-sites.txt", what="character")
+web$site <- factor(web$site, levels=1:length(sitenames), labels=sitenames)
+## also factor machine id
+web$id <- factor(web$id, levels=1:length(unique(web$id)))
+## get total visits per-machine and % of time on each site
+## tapply(a,b,c) does c(a) for every level of factor b.
+machinetotals <- as.vector(tapply(web$visits,web$id,sum)) 
+visitpercent <- 100*web$visits/machinetotals[web$id]
+## use this info in a sparse matrix
+## this is something you'll be doing a lot; familiarize yourself.
+xweb <- sparseMatrix(
+	i=as.numeric(web$id), j=as.numeric(web$site), x=visitpercent,
+	dims=c(nlevels(web$id),nlevels(web$site)),
+	dimnames=list(id=levels(web$id), site=levels(web$site)))
+# what sites did household 1 visit?
+#head(xweb[1, xweb[1,]!=0])
+## now read in the spending data 
+yspend <- read.csv("../Data/browser-totalspend.csv", row.names=1)  # us 1st column as row names
+yspend <- as.matrix(yspend) ## good practice to move from dataframe to matrix
+```
+
+```{r lasso example}
+spender <- gamlr(xweb, log(yspend), verb=TRUE); spender
+```
+```{r lasso plot}
+plot(spender) ## path plot
+```
+
+## Experiment: Elastic Net (alpha = 0.5)
+````{r elastic net}
+library (glmnet)
+## Using glmnet library (ChatGPT recommendation to adjust elastic net, similar commands)
+
+# Elastic Net
+set.seed(123)  
+alpha_value <- 0.3  # Elastic Net: Lasso combination (1) and Ridge (0)
+
+spender_elastic <- glmnet(xweb, log(yspend), alpha = alpha_value, family = "gaussian")
+
+plot(spender_elastic, xvar = "lambda", label = TRUE)
+title("Elastic Net Regularization Path")
+
+````
+Intuition: Elastic Net selects more variables than Lasso in datasets with high multicollinearity, distributing weights across correlated predictors. In contrast, Lasso is more aggressive in eliminating irrelevant variables by shrinking their coefficients to zero.
+
+
+## Experiment: Ridge (alpha = 0)
+```{r ridge}
+ridge_model <- glmnet(
+  xweb, 
+  log(yspend), 
+  alpha = 0,  # Ridge
+  family = "gaussian"
+)
+
+plot(ridge_model, xvar = "lambda", label = TRUE)
+title("Ridge Regularization Path")
+```
+Intuition: Ridge is more suitable when all variables contribute some information and multicollinearity is high. Lasso is better when you believe only a few variables are truly relevant.
+
+## Main intuitions when comparing Lasso, Ridge and Elastic Net for this setup
+- Lasso: For strict variable selection. 
+- Ridge: To stabilize coefficients when multicollinearity is present. ç
+- Elastic Net: A balance between Lasso and Ridge, useful in cases of multicollinearity and dispersion. 
+
+## Sample of 10 coefficients: comparison
+```{r comparison}
+# Seleccionar un subconjunto de coeficientes (por ejemplo, los primeros 10)
+num_coeff <- 10  # Número de coeficientes a comparar
+
+# Obtener los coeficientes de los primeros valores de cada modelo
+coef_lasso <- as.matrix(coef(spender))[1:num_coeff, , drop = FALSE]  # Lasso
+coef_elastic <- as.matrix(coef(spender_elastic))[1:num_coeff, , drop = FALSE]  # Elastic Net
+coef_ridge <- as.matrix(coef(ridge_model))[1:num_coeff, , drop = FALSE]  # Ridge
+
+# Crear una tabla comparativa con los primeros coeficientes
+comparison_table <- data.frame(
+  Coefficients = rownames(coef_lasso),
+  `Lasso Coef` = coef_lasso[, 1],
+  `Elastic Net Coef` = coef_elastic[, 1],
+  `Ridge Coef` = coef_ridge[, 1]
+)
+
+# Imprimir la tabla con los primeros coeficientes
+print(comparison_table)
+```
+Coefficients in Ridge seem to be insignificant. Elastic net drops more coefficients than Lasso in this sample of 10.
+
+## KFold CV for Lasso
+```{r kfold cv lasso}
+cv.spender <- cv.gamlr(xweb, log(yspend))
+plot(cv.spender)
+```
+
+```{r kfold cv betamin}
+betamin = coef(cv.spender, select="min"); betamin
+```
+
+```{r kfold cv elastic net}
+cv_spender_elastic <- cv.glmnet(
+  xweb, 
+  log(yspend), 
+  alpha = alpha_value,  #Elastic Net, alpha = 0.3
+  family = "gaussian",  
+  nfolds = 10,  # 10-fold cross-validation
+  type.measure = "mse"  # Min MSE
+)
+
+plot(cv_spender_elastic)
+
+```
+
+## Aikaike's Info Criterion
+```{r AIC}
+head(AIC(spender))
+```
+For AIC, the lower, the better. 
+
+
+
+
