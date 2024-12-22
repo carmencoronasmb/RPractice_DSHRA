@@ -1,0 +1,132 @@
+---
+title: "02.Uncertainty: week 45"
+output: html_document
+date: "2024-12-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setting the data and working directory
+```{r dataset}
+setwd("/Users/carmencilla/Desktop/Master EUR/Block 2/Data Science and HR Analytics/FEM11213-Coronas/")
+browser <- read.csv("Data/web-browsers.csv")
+dim(browser)
+head(browser)
+```
+
+```{r stats browse}
+ mean(browser$spend); var(browser$spend)/1e4; sqrt(var(browser$spend)/1e4)
+```
+
+## Main idea about bootstrap
+Treat your sample as a population with size 
+```{r original bootstrap}
+ B <- 1000  #Number of iterations for bootstrap resampling
+  mub <- c()  # New vector: Will hold the mean values for each bootstrap sample
+  for (b in 1:1000){ ## Loop through 1000 bootstrap iterations
+    samp_b <- sample.int(nrow(browser), replace=TRUE) #Sets a bootstrap sample by randomly sampling row indices (with replacement)
+    mub <- c(mub, mean(browser$spend[samp_b])) #Compute the mean of the 'spend' column for the current bootstrap sample and the mean to the vect (mub)
+  }
+  sd(mub) #SD: provides variability of the mean estimate. SD = 81
+```
+```{r experiment bootstrap: without replacement}
+ B <- 1000  #Number of iterations for bootstrap resampling
+  mub <- c()  # New vector: Will hold the mean values for each bootstrap sample
+  for (b in 1:1000){ ## Loop through 1000 bootstrap iterations
+    samp_b <- sample.int(nrow(browser), replace=FALSE) #WITHOUT REPLACEMENT
+    mub <- c(mub, mean(browser$spend[samp_b])) #Compute the mean of the 'spend' column for the current bootstrap sample and the mean to the vect (mub)
+  }
+  sd(mub) #SD: provides variability of the mean estimate. SD now 0. 
+```
+## Results from bootstrap without replacement
+  In line with lecture: uncertainty and variance in bootstrap comes bc of the replacement. 
+  "Sampling without replacement would generate no variability across samples." Indeed, SD = 0. 
+```{r frenquentist distribution}
+
+h <- hist(mub) # Create a histogram of the bootstrap sample means 'mub'
+
+# Generate a sequence of x-values spanning the range of 'mub'
+  xfit <- seq(min(mub), max(mub), length = 40)  
+# 'xfit' is a sequence of 40 equally spaced values between the minimum and maximum of 'mub'.
+# It will be used for plotting the fitted normal distribution curve.
+
+# Compute the y-values for a normal distribution (probability density function)
+  yfit <- dnorm(xfit, mean = mean(browser$spend), sd = sqrt(var(browser$spend)/1e4))  
+# 'dnorm' calculates the normal density at each value of 'xfit'.
+# Parameters:
+# - mean = mean(browser$spend): The mean of the original data.
+# - sd = sqrt(var(browser$spend)/1e4): Standard deviation of the normal distribution,
+#   scaled down by 1e4 for visualization (to match the histogram scale).
+
+# Scale the y-values to match the histogram
+yfit <- yfit * diff(h$mids[1:2]) * length(mub)  
+# Explanation of each term:
+# - 'diff(h$mids[1:2])': The bin width of the histogram.
+#   - This ensures the area under the fitted curve aligns with the histogram's bin sizes.
+# - 'length(mub)': The total number of observations in 'mub' (i.e., the histogram's total count).
+#   - This ensures the total area of the curve matches the histogram's total area.
+# Together, these adjustments align the normal curve with the scale and range of the histogram.
+
+# Add the fitted normal curve to the histogram
+lines(xfit, yfit, col = "black", lwd = 2)  
+# 'lines' overlays the fitted normal curve on the histogram.
+# Parameters:
+# - 'col = "black"': Sets the color of the line to black.
+# - 'lwd = 2': Sets the line width to make it thicker for better visibility.
+```
+Note. all mub are the same value. This gives a sqaure as the distribution... With the second command associated to yfit we are re-scaling!! 
+
+
+```{r bootstrapping regressions}
+
+##Note for me: it takes a little time to process!! These are not inmediate processes!!!!
+
+B <- 1000 # Number of bootstrap iterations
+  betas <- c()  # Currently initialized as a vector
+  for (b in 1:1000){ # Loop through 1000 bootstrap iterations
+    samp_b <- sample.int(nrow(browser), replace=TRUE) # Create a bootstrap sample by sampling row indices with replacement 
+    reg_b <- glm(log(spend) ~ broadband + anychildren, data=browser[samp_b,]) # Fit a regression model using the bootstrap sample (uses variables in the dataset!)
+    betas <- rbind(betas, coef(reg_b)) # Resulting coefficients stored in the empty vector. 
+  }; head(betas, n=3)
+  
+```
+
+We are repeating the same bootstrap to check different results. 
+```{r bootstrapping regressions 2}
+
+##Second try:
+B <- 1000 # Number of bootstrap iterations
+  betas <- c()  # Currently initialized as a vector
+  for (b in 1:1000){ # Loop through 1000 bootstrap iterations
+    samp_b <- sample.int(nrow(browser), replace=TRUE) # Create a bootstrap sample by sampling row indices with replacement 
+    reg_b <- glm(log(spend) ~ broadband + anychildren, data=browser[samp_b,]) # Fit a regression model using the bootstrap sample (uses variables in the dataset!)
+    betas <- rbind(betas, coef(reg_b)) # Resulting coefficients stored in the empty vector. 
+  }; head(betas, n=3)
+```
+
+Finally, we are experimenting with a different number of boostrap iterations. 
+```{r bootstrapping regressions 3}
+
+##Third try:
+B <- 500 # Number of bootstrap iterations
+  betas <- c()  # Currently initialized as a vector
+  for (b in 1:500){ # Loop through 1000 bootstrap iterations
+    samp_b <- sample.int(nrow(browser), replace=TRUE) # Create a bootstrap sample by sampling row indices with replacement 
+    reg_b <- glm(log(spend) ~ broadband + anychildren, data=browser[samp_b,]) # Fit a regression model using the bootstrap sample (uses variables in the dataset!)
+    betas <- rbind(betas, coef(reg_b)) # Resulting coefficients stored in the empty vector. 
+  }; head(betas, n=3)
+```
+
+## Notes from the lecture
+JOINT sampling distribution! Useful to estimate covariances. 
+```{r covariances from bootstrap}
+cov(betas[,"broadband"], betas[,"anychildren"])
+##Small covariance in this case. 
+```
+
+
+## End of bootstrap: 
+Important: Bootstrap performs poorly if sample is a poor approximation of the population.
+Useful in low dimensional data! (7 variables in browse dataset)

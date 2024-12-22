@@ -1,0 +1,253 @@
+---
+title: "FEM11213 - Data Science and HR Analytics"
+subtitle: "01 - Introduction"
+author: "Sacha Kapoor"
+date: "28 October 2024 (updated: `r Sys.Date()`)"
+output:
+  xaringan::moon_reader:
+    css: [default, "style/middlebury.css", "style/middlebury-fonts.css"]
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+      ratio: "16:9"
+
+---
+################################################################################
+###################       Notes Carmen Week 1      #############################
+################################################################################
+
+##Stuff related with render slides: 
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+
+knitr::opts_chunk$set(eval = TRUE,
+               echo = TRUE,
+               warning = FALSE,
+               message = FALSE,
+               cache = FALSE)
+
+htmltools::tagList(rmarkdown::html_dependency_font_awesome())
+```
+
+#Data visualization, plots, figures.
+```{r plots_and_figures, include=FALSE}
+library(ggplot2)
+library(kableExtra)
+
+theme_set(theme_gray(15))
+```
+
+#Packages for references!! (I cannot render the slides because I do not find references.bib online or in Canvas)
+```{r, references, echo=FALSE, cache=FALSE}
+install.packages("RefManageR")
+library(RefManageR)
+BibOptions(check.entries = FALSE, 
+           bib.style = "numeric", 
+           cite.style = "authoryear", 
+           style = "markdown",
+           hyperlink = FALSE, 
+           dashed = FALSE)
+bib <- ReadBib("../refs/references.bib", check = FALSE)
+```
+
+class: title-slide-section-gray
+##### I delete all slides with content to conserve only code-based examples #####
+# Computation
+
+A key learning objective in this course is learning/developing skills at writing and reading computer code which is relevant for data analysis. You are not expected to become a software engineer. 
+
+You are expected to be able to read and write high level SCRIPTED code. We use R because it is 
+
+  * an open-source high-level language
+  * built for statistical analysis 
+  * relatively forgiving for a novice programmer
+  * used widely in government, academia, and the private sector
+  
+There will be a lot of self-learning here. There are many online resources out there. You should consult them. You also have the notes for the course via Github. 
+---
+# Computation
+
+R is a great tool. Not a panacea. No software is. 
+
+  * Python is better with data scraping and unstructured data like raw text. 
+  * Gluon and Keras are better for large-scale ML. 
+  * many other examples. 
+  
+You will have to adapt to the company or preferred software of others. It is good practice to learn to write and read code in one language really well while being flexible and willing to adapt to others. 
+
+---
+# Computation
+
+Economists generally work with flat files. Flat files have 2 dimensions: rows and column. We will do the same. 
+
+Be aware that flat files are often not the preferred method for storing and managing data. Large organizations will have structured and unstructured data: 
+  1. Structured data 
+      + Variables well-defined 
+      + Stored in relational database
+      + Flat files can be extracted using Structured Query Language (SQL)
+      
+  2. Unstructured data
+      + Variables are not well-defined (Whatsapp messages)
+      + Stored over a network of machines, a distributed file system (DFS)
+      
+R can pull data from both types of systems. Should you spend your time on this? I would say no. Ask your software/data engineers to pull the desired data for you, in the format you want. 
+
+---
+# Computation
+
+To read flat files you can use the read.csv command in R:  
+
+```{r}
+##I create a folder in my Repository with Data for this week and following ones. 
+##I download this csv from Canvas (Files) and run this chunk.
+
+CEO_Diary <- read.csv("/Users/carmencilla/Desktop/Master EUR/Block 2/Data Science and HR Analytics/FEM11213-Coronas/Data/survey_response_data.csv")
+```
+
+and then 
+
+```{r}
+View(CEO_Diary)
+
+##Investigate some details about the dataset: 
+dim(CEO_Diary) ##Dimension: rows x columns
+nrow(CEO_Diary) ##Number of rows
+ncol(CEO_Diary) ##Number of columns
+colnames(CEO_Diary) ##Column names
+summary(CEO_Diary) ##Summary of the variables: min/max values, main stats, N/As
+
+```
+
+to see a dataset of time diaries for CEOS:
+
+```{r, echo=FALSE, out.width = "80%", out.height= "60%", fig.align='center'}
+
+library(knitr)        # for including graphics
+include_graphics("figs/ViewCEODiary.png")
+
+##Image of View function of CEO_Diary dataset. 
+
+```
+
+# Computation
+
+CEO_Diary is called a dataframe. To subset the data you can use 
+
+```{r}
+CEO_Diary[1:15,c(1:5,37, 39, 40)]  ##Open the df 15 rows, 8 columns: from 1 to 5, 37, 39, 40: the ones used in the paper!! To build main results. 
+```
+
+---
+
+# Computation
+
+To find out the "class" of a variable, you can use the apply function  
+```{r}
+apply(CEO_Diary,2,class) 
+```
+ 
+##More info from ChatGPT in Variable Classes for `apply()`
+
+- **Numeric (`numeric`)**: Continuous or discrete numerical values.
+- **Integer (`integer`)**: Whole numbers (`1L`, `2L`).
+- **Character (`character`)**: Text or strings.
+- **Logical (`logical`)**: Boolean values (`TRUE`, `FALSE`).
+- **Factor (`factor`)**: Categorical variables with levels.
+- **Date/Time (`Date`, `POSIXct`)**: Dates and timestamps.
+- **Complex (`complex`)**: Complex numbers.
+- **Matrix/Array (`matrix`, `array`)**: Homogeneous multidimensional structures.
+- **Data Frame (`data.frame`)**: Tables with columns of different types.
+- **List (`list`)**: Collection of heterogeneous objects.
+
+---
+
+# Computation
+
+R is "high level" because there are MANY well-designed built-in functions that can be applied to data:   
+```{r}
+nrow(CEO_Diary) ##Already used. 
+```
+
+```{r}
+summary(CEO_Diary[1:5]) ##Already used.
+```
+
+---
+
+# Computation
+
+Graphical analysis is a strength of R.
+```{r}
+
+##Open a figure in png. 
+  png(file="figs/CEOTypes.png", width=800, height=300)
+  par(mar=c(9, 3 ,1,1))
+  barplot(prop.table(table(CEO_Diary$type)), las=2)
+  dev.off()
+```
+to produce 
+
+```{r, echo=FALSE, out.width="50%"}
+##I do not have the figure, but learnt the command. 
+  knitr::include_graphics("figs/CEOTypes.png")
+```
+
+
+---
+
+# Computation
+
+What does "barplot(prop.table(table(CEO_Diary$type)), las=2)" do? How can you do coding experiments to learn what this function does? 
+
+Go to console and run: 
+
+CEO_Diary <- read.csv("Data/survey_response_data.csv");
+
+barplot(prop.table(table(CEO_Diary$type)));
+
+table(CEO_Diary$type);
+
+prop.table(table(CEO_Diary$type));
+
+###EXPERIMENT WITH THE CODE SUGGESTED. 
+barplot(prop.table(table(CEO_Diary$type))) 
+  #Meeting has the highest frequency. 
+
+table(CEO_Diary$type)
+  #Output from the table below: 
+        business_meal     conference_call               email             meeting 
+               9459                4183               11880               94135 
+              other     personal_family          phone_call        public_event 
+                 62               21895                7075                2913 
+         site_visit          travelling    video_conference       working_alone 
+               7578               18950                 699               45336 
+workrelated_leisure 
+               1556 
+
+prop.table(table(CEO_Diary$type))
+  #Same command as the previous one but using frequencies over 1. Output below. 
+       business_meal     conference_call               email             meeting 
+       0.0419057155        0.0185317272        0.0526313458        0.4170413918 
+              other     personal_family          phone_call        public_event 
+       0.0002746754        0.0970002791        0.0313440043        0.0129053123 
+         site_visit          travelling    video_conference       working_alone 
+       0.0335724190        0.0839531989        0.0030967433        0.2008497216 
+workrelated_leisure 
+       0.0068934658 
+       
+---
+
+# Computation
+
+Can fit statistical models. For example, can fit regression of Strategy (=1 if meeting about strategy) on 
+```{r}
+fit <- glm(strategy ~ consultants + politicians, data=CEO_Diary); summary(fit)
+  #Results: significant coefficients. 
+  #Coefficients would be the following ones: 
+    #Strategy = 0.0239291 + 0.0113590*Consultants + -0.0241179*Politicians
+```
+
+
+
