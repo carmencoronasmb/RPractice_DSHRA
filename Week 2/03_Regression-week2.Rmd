@@ -1,7 +1,8 @@
 ---
 title: "03. Regression"
+author: "Carmen Coronas"
 output: html_document
-date: "2024-12-11"
+date: "October 2024"
 ---
 
 ```{r setup, include=FALSE}
