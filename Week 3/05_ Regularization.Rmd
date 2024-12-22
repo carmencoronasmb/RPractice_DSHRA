@@ -1,0 +1,257 @@
+---
+title: "5. Classification"
+author: "Carmen Coronas"
+output: html_document
+date: "November 2024"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## KNN Algorithm
+Note: KNN does not weight by distance, but by numbers of neighbors. This approach makes mistakes. 
+
+```{r data KNN}
+library(MASS)
+data(fgl)
+dim(fgl)
+```
+214 observations, 9 variables. First variables indicate the composition of the glass, type of glass in the last variable.
+
+```{r plot}
+par(mfrow=c(2,3))
+plot(RI ~ type, data=fgl, col=c(grey(.2),2:6), las=2)
+plot(Al ~ type, data=fgl, col=c(grey(.2),2:6), las=2)
+plot(Na ~ type, data=fgl, col=c(grey(.2),2:6), las=2)
+plot(Mg ~ type, data=fgl, col=c(grey(.2),2:6), las=2)
+plot(Ba ~ type, data=fgl, col=c(grey(.2),2:6), las=2)
+plot(Si ~ type, data=fgl, col=c(grey(.2),2:6), las=2)
+```
+So many overlaps. Head could be predicted in Ba plot. 
+
+```{r glass head}
+head(fgl, n = 2)
+```
+
+Rescaled everything, we get the proportion of each component. 
+```{r scale variables}
+x <- scale(fgl[,1:9]) # column 10 is class label, scale converts to mean 0 sd 1
+apply(x,2,sd) # apply function sd to columns of x
+```
+We expand KNN analysis in class (lecture KNN with 5 and 1. We are also going to compare with 2 and 8). 
+```{r KNN lecture}
+library(class) #has knn function 
+test <- sample(1:214,10) #draw a random sample of 10 rows 
+nearest1 <- knn(train=x[-test,], test=x[test,], cl=fgl$type[-test], k=1)
+nearest2 <- knn(train=x[-test,], test=x[test,], cl=fgl$type[-test], k=2)
+nearest3 <- knn(train=x[-test,], test=x[test,], cl=fgl$type[-test], k=3)
+nearest5 <- knn(train=x[-test,], test=x[test,], cl=fgl$type[-test], k=5)
+nearest8 <- knn(train=x[-test,], test=x[test,], cl=fgl$type[-test], k=8)
+results_knn1 <- data.frame(fgl$type[test],nearest1, nearest2, nearest3, nearest5, nearest8)
+print(results_knn1)
+```
+Results are changing everytime we run the algorithm (samples of 10 observations in 124). 
+
+## Classification Example. German Credit Data.
+```{r classification}
+#### ******* German Credit Data ******* ####
+credit <- read.csv("/Users/carmencilla/Desktop/Master EUR/Block 2/Data Science and HR Analytics/FEM11213-Coronas/Data/credit.csv")
+## re-level the credit history and checking account status
+credit$history = factor(credit$history, levels=c("A30","A31","A32","A33","A34"))
+levels(credit$history) = c("good","good","poor","poor","terrible")
+## a few others
+credit$foreign <- factor(credit$foreign, levels=c("A201","A202"), labels=c("foreign","german"))
+credit$rent <- factor(credit$housing=="A151")
+credit$purpose <- factor(credit$purpose, levels=c("A40","A41","A42","A43","A44","A45","A46","A47","A48","A49","A410"))
+levels(credit$purpose) <- c("newcar","usedcar",rep("goods/repair",4),"edu",NA,"edu","biz","biz")
+
+credit <- credit[,c("Default", "duration", "amount",
+                    "installment", "age", "history",
+                    "purpose", "foreign", "rent")]
+```
+
+
+```{r visualize data}
+head(credit)
+```
+
+```{r dim data}
+dim(credit)
+```
+
+```{r sparse model}
+library(gamlr)
+credx <- sparse.model.matrix(Default ~ . ^ 2, data=naref(credit)); colnames(credx)
+```
+
+```{r default}
+default <- credit$Default
+credscore <- cv.gamlr(credx, default, family="binomial")
+```
+
+
+```{r XXX}
+par(mfrow=c(1,2))
+plot(credscore$gamlr)
+plot(credscore)
+```
+
+```{r classification example}
+sum(coef(credscore, s="min")!=0) # min
+sum(coef(credscore$gamlr)!=0) # AICc
+sum(coef(credscore$gamlr, s=which.min(AIC(credscore$gamlr)))!=0) # AIC
+# the OOS R^2
+1 - credscore$cvm[credscore$seg.min]/credscore$cvm[1]
+```
+
+```{r XXX}
+## What are the underlying default probabilities
+## In sample probability estimates
+pred <- predict(credscore$gamlr, credx, type="response")
+pred <- drop(pred) # remove the sparse Matrix formatting
+boxplot(pred ~ default, xlab="default", ylab="prob of default", col=c("pink","dodgerblue"))
+```
+
+```{r classification rule}
+rule <- 1/5 # move this around to see how these change
+sum( (pred>rule)[default==0] )/sum(pred>rule) ## false positive rate at 1/5 rule
+sum( (pred<rule)[default==1] )/sum(pred<rule) ## false negative rate at 1/5 rule
+```
+
+```{r sensitivity}
+sum( (pred>rule)[default==1] )/sum(default==1) ## sensitivity
+```
+
+
+```{r specifity}
+sum( (pred<rule)[default==0] )/sum(default==0) ## specificity
+```
+
+## OOS ROC curve
+```{r ROC}
+# refit the model using only 1/2 of data
+test <- sample.int(1000,500)
+credhalf <- gamlr(credx[-test,], default[-test], family="binomial")
+predoos <- predict(credhalf, credx[test,], type="response")
+defaultoos <- default[test]
+```
+
+```{r XXX}
+# Instalar y cargar la librería pROC si no está instalada
+if (!requireNamespace("pROC", quietly = TRUE)) {
+  install.packages("pROC")
+}
+library(pROC)
+
+# Crear el objeto ROC usando las predicciones y los valores reales
+roc_obj <- roc(defaultoos, predoos)
+
+# Graficar la curva ROC
+plot(roc_obj, main = "ROC Curve for credhalf", col = "blue", lwd = 2)
+abline(a = 0, b = 1, lty = 2, col = "red")  # Línea diagonal como referencia
+
+# Calcular el AUC (Area Under the Curve)
+auc_valor <- auc(roc_obj)
+cat("AUC for credhalf:", auc_valor, "\n")
+
+```
+
+## Experiment: changing the threshold
+New classification rule. 
+We expect that increasing the threshold, new prediction will move downwards along the ROC curve. Viceversa if decreasing (upwards), since ROC curve diminishes with c. 
+```{r XXX}
+rule_2 <- 1/2 # move this around to see how these change
+sum( (pred>rule_2)[default==0] )/sum(pred>rule_2) ## false positive rate at 1/2 rule
+sum( (pred<rule_2)[default==1] )/sum(pred<rule_2) ## false negative rate at 1/2 rule
+```
+
+
+```{r XXX}
+test_2 <- sample.int(1000,500)
+credhalf_2 <- gamlr(credx[-test_2,], default[-test_2], family="binomial")
+predoos_2 <- predict(credhalf_2, credx[test_2,], type="response")
+defaultoos_2 <- default[test_2]
+```
+
+```{r XXX}
+# Crear el objeto ROC usando las predicciones y los valores reales
+roc_obj_2 <- roc(defaultoos_2, predoos_2)
+
+# Graficar la curva ROC
+plot(roc_obj_2, main = "ROC Curve for credhalf", col = "blue", lwd = 2)
+abline(a = 0, b = 1, lty = 2, col = "red")  # Línea diagonal como referencia
+
+# Calcular el AUC (Area Under the Curve)
+auc_valor_2 <- auc(roc_obj_2)
+cat("AUC for credhalf:", auc_valor_2, "\n")
+```
+
+```{r ROC FAILED TRY}
+# Crear el objeto ROC usando las predicciones y los valores reales
+roc_obj_2 <- roc(defaultoos_2, predoos_2)
+
+# Graficar la curva ROC con TPR y FPR en los ejes
+plot(roc_obj_2, main = "ROC Curve for credhalf", col = "blue", lwd = 2, 
+     xlab = "False Positive Rate (FPR)", ylab = "True Positive Rate (TPR)")
+abline(a = 0, b = 1, lty = 2, col = "red")  # Línea diagonal como referencia
+
+# Calcular el AUC (Area Under the Curve)
+auc_valor_2 <- auc(roc_obj_2)
+cat("AUC for credhalf:", auc_valor_2, "\n")
+
+# Añadir un punto específico
+# Supongamos que queremos marcar la predicción con threshold = 0.5
+threshold <- 0.5
+fpr <- mean((predoos_2 > threshold)[defaultoos_2 == 0])  # False Positive Rate
+tpr <- mean((predoos_2 > threshold)[defaultoos_2 == 1])  # True Positive Rate
+
+# Dibujar el punto en la gráfica
+points(x = fpr, y = tpr, pch = 19, col = "green", cex = 1.5)
+
+# Agregar una leyenda para explicar el punto
+legend("bottomright", legend = c("Threshold = 0.5"), col = c("green"), pch = c(19), bty = "n")
+
+```
+
+```{r lasso penalization}
+library(glmnet)
+xfgl <- sparse.model.matrix(type~.*RI, data=fgl)[,-1] #Design matrix includes chemical composition variables and all their interactions with refractive index (RI).
+gtype <- fgl$type
+glassfit <- cv.glmnet(xfgl, gtype, family="multinomial") #cross validation experiments
+glassfit
+```
+
+```{r plot lasso}
+plot(glassfit)
+```
+
+```{r reg path}
+par(mfrow=c(2,3), mai=c(.6,.6,.4,.4)) 
+plot(glassfit$glm, xvar="lambda")
+```
+
+```{r B}
+B  <- coef(glassfit, select="min"); B ## extract coefficients
+B <- do.call(cbind, B) 
+colnames(B) <- levels(gtype) # column names dropped in previous command. This command adds them back.
+```
+```{r coeff}
+DeltaBMg <- B["Mg", "WinNF"] - B["Mg", "WinF"]; DeltaBMg; #B is a matrix. Fixed Row. Vary Columns. k is Mg, a is WinNF, b is WinF. 
+exp(DeltaBMg);
+1 - exp(DeltaBMg)
+```
+
+```{r predict}
+probfgl <- predict(glassfit, xfgl, type="response"); dim(probfgl); head(probfgl,n=2); tail(probfgl,n=2)
+#gives in-sample probabilities. Note: this is nXKX1 array. Need nXK array. To convert: 
+probfgl <- drop(probfgl); #use dim(probfgl) to check dim is 214 by 6
+n <- nrow(xfgl)
+trueclassprobs <- probfgl[cbind(1:n, gtype)]; head(trueclassprobs,n=3); tail(trueclassprobs,n=3) 
+#for each obs there is one probability that corresponds to realized shard for that obs. Last command extracts those probabilities. 
+#Note use of a matrix to index a matrix.
+```
+```{r plot results}
+plot(trueclassprobs ~ gtype, col="lavender", varwidth=TRUE,
+	xlab="glass type", ylab="prob( true class )") 
+```
