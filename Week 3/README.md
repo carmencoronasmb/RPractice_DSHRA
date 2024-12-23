@@ -17,9 +17,16 @@
   - Results vary with each run due to random sampling.
   - Highlighted overlaps in data visualizations complicating predictions (e.g., Ba is predictive).
 
-  ### Experiment: German Credit Data
+  ### German Credit Data
+  - Replicated example from class. Understood. issue with real world data when used incorrectly. 
   - Applied classification techniques to a real-world dataset.
   - Investigated predictive performance and challenges in modeling.
+  
+  ### Experiment ROC curve
+  - Try different package to obtain ROC curve
+  - Issue related with axis: R represents specificity and sensitivity instead of sensitivity and (1-specificity).
+  - Finally, I found Roc.C source in Taddy's repo.  
+  - I try with different threholds and classification rules. 
   
   ### Issues
   - KNN: Results are highly sensitive to sample selection and k values.

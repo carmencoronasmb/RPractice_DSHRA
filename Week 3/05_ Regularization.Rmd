@@ -39,7 +39,11 @@ Rescaled everything, we get the proportion of each component.
 x <- scale(fgl[,1:9]) # column 10 is class label, scale converts to mean 0 sd 1
 apply(x,2,sd) # apply function sd to columns of x
 ```
+
+## Experiment: KNN
+
 We expand KNN analysis in class (lecture KNN with 5 and 1. We are also going to compare with 2 and 8). 
+
 ```{r KNN lecture}
 library(class) #has knn function 
 test <- sample(1:214,10) #draw a random sample of 10 rows 
@@ -56,7 +60,7 @@ Results are changing everytime we run the algorithm (samples of 10 observations 
 ## Classification Example. German Credit Data.
 ```{r classification}
 #### ******* German Credit Data ******* ####
-credit <- read.csv("/Users/carmencilla/Desktop/Master EUR/Block 2/Data Science and HR Analytics/FEM11213-Coronas/Data/credit.csv")
+credit <- read.csv("/Users/carmencilla/Desktop/RPractice_DSHRA/Data/credit.csv")
 ## re-level the credit history and checking account status
 credit$history = factor(credit$history, levels=c("A30","A31","A32","A33","A34"))
 levels(credit$history) = c("good","good","poor","poor","terrible")
@@ -90,28 +94,28 @@ default <- credit$Default
 credscore <- cv.gamlr(credx, default, family="binomial")
 ```
 
-
-```{r XXX}
+```{r plot credit}
 par(mfrow=c(1,2))
 plot(credscore$gamlr)
 plot(credscore)
 ```
 
 ```{r classification example}
-sum(coef(credscore, s="min")!=0) # min
-sum(coef(credscore$gamlr)!=0) # AICc
-sum(coef(credscore$gamlr, s=which.min(AIC(credscore$gamlr)))!=0) # AIC
+sum(coef(credscore, s="min")!=0) # minimum coefficients
+sum(coef(credscore$gamlr)!=0) # AICc indicates 21
+sum(coef(credscore$gamlr, s=which.min(AIC(credscore$gamlr)))!=0) # AIC indicates 21
 # the OOS R^2
-1 - credscore$cvm[credscore$seg.min]/credscore$cvm[1]
+1 - credscore$cvm[credscore$seg.min]/credscore$cvm[1] #goodness 9%
 ```
 
-```{r XXX}
+```{r predict}
 ## What are the underlying default probabilities
 ## In sample probability estimates
 pred <- predict(credscore$gamlr, credx, type="response")
 pred <- drop(pred) # remove the sparse Matrix formatting
 boxplot(pred ~ default, xlab="default", ylab="prob of default", col=c("pink","dodgerblue"))
 ```
+We appreciate an overlap between defaulters and no defaulters. Possible issue related with this data. Not useful for prediction. 
 
 ```{r classification rule}
 rule <- 1/5 # move this around to see how these change
@@ -122,7 +126,6 @@ sum( (pred<rule)[default==1] )/sum(pred<rule) ## false negative rate at 1/5 rule
 ```{r sensitivity}
 sum( (pred>rule)[default==1] )/sum(default==1) ## sensitivity
 ```
-
 
 ```{r specifity}
 sum( (pred<rule)[default==0] )/sum(default==0) ## specificity
@@ -137,37 +140,100 @@ predoos <- predict(credhalf, credx[test,], type="response")
 defaultoos <- default[test]
 ```
 
-```{r XXX}
-# Instalar y cargar la librería pROC si no está instalada
+```{r proc package}
+# PROC package
 if (!requireNamespace("pROC", quietly = TRUE)) {
   install.packages("pROC")
 }
 library(pROC)
 
-# Crear el objeto ROC usando las predicciones y los valores reales
 roc_obj <- roc(defaultoos, predoos)
 
-# Graficar la curva ROC
+#ROC curve
 plot(roc_obj, main = "ROC Curve for credhalf", col = "blue", lwd = 2)
 abline(a = 0, b = 1, lty = 2, col = "red")  # Línea diagonal como referencia
 
-# Calcular el AUC (Area Under the Curve)
+# AUC
 auc_valor <- auc(roc_obj)
 cat("AUC for credhalf:", auc_valor, "\n")
 
 ```
 
+```{r ROC taddy}
+#source("/Users/carmencilla/Desktop/RPractice_DSHRA/Week 3/roc.R")
+
+#png(file="ROCCurve.png", width=600, height=350)
+par(mai=c(.9,.9,.2,.1), mfrow=c(1,2))
+roc(p=pred, y=default, bty="n", main="in-sample")
+## our 1/5 rule cutoff
+points(x= 1-mean((pred<.2)[default==0]), 
+	y=mean((pred>.2)[default==1]), 
+	cex=1.5, pch=20, col='red') 
+## a standard `max prob' (p=.5) rule
+points(x= 1-mean((pred<.5)[default==0]), 
+	y=mean((pred>.5)[default==1]), 
+	cex=1.5, pch=20, col='blue') 
+legend("bottomright",fill=c("red","blue"),
+	legend=c("p=1/5","p=1/2"),bty="n",title="cutoff")
+roc(p=predoos, y=defaultoos, bty="n", main="out-of-sample")
+## our 1/5 rule cutoff
+points(x= 1-mean((predoos<.2)[defaultoos==0]), 
+	y=mean((predoos>.2)[defaultoos==1]), 
+	cex=1.5, pch=20, col='red') 
+## a standard `max prob' (p=.5) rule
+points(x= 1-mean((predoos<.5)[defaultoos==0]), 
+	y=mean((predoos>.5)[defaultoos==1]), 
+	cex=1.5, pch=20, col='blue') 
+dev.off()
+```
+
+Taddy's code generates a png file. We are also trying two new more thresholds in Taddy. 
+
+```{r ROC taddy}
+source("/Users/carmencilla/Desktop/RPractice_DSHRA/Week 3/roc.R")
+
+png(file="ROCCurve2.png", width=600, height=350)
+par(mai=c(.9,.9,.2,.1), mfrow=c(1,2))
+roc(p=pred, y=default, bty="n", main="in-sample")
+## our 1/5 rule cutoff
+points(x= 1-mean((pred<.2)[default==0]), 
+	y=mean((pred>.2)[default==1]), 
+	cex=1.5, pch=20, col='red') 
+## a standard `max prob' (p=.5) rule
+points(x= 1-mean((pred<.5)[default==0]), 
+	y=mean((pred>.5)[default==1]), 
+	cex=1.5, pch=20, col='blue') 
+legend("bottomright",fill=c("red","blue"),
+	legend=c("p=1/5","p=1/2"),bty="n",title="cutoff")
+roc(p=predoos, y=defaultoos, bty="n", main="out-of-sample")
+## our 1/5 rule cutoff
+points(x= 1-mean((predoos<.2)[defaultoos==0]), 
+	y=mean((predoos>.2)[defaultoos==1]), 
+	cex=1.5, pch=20, col='red') 
+## a standard `max prob' (p=.5) rule
+points(x= 1-mean((predoos<.5)[defaultoos==0]), 
+	y=mean((predoos>.5)[defaultoos==1]), 
+	cex=1.5, pch=20, col='blue') 
+points(x= 1-mean((predoos<.9)[defaultoos==0]), 
+	y=mean((predoos>.9)[defaultoos==1]), 
+	cex=1.5, pch=20, col='green') 
+dev.off()
+```
+
+Indeed, we appreciate that increasing the threshold to (+ infinite), it moves downwards the curve (green point). 
+
 ## Experiment: changing the threshold
 New classification rule. 
 We expect that increasing the threshold, new prediction will move downwards along the ROC curve. Viceversa if decreasing (upwards), since ROC curve diminishes with c. 
-```{r XXX}
+```{r changing the threshold}
 rule_2 <- 1/2 # move this around to see how these change
 sum( (pred>rule_2)[default==0] )/sum(pred>rule_2) ## false positive rate at 1/2 rule
 sum( (pred<rule_2)[default==1] )/sum(pred<rule_2) ## false negative rate at 1/2 rule
 ```
 
+Smaller FPR and greater FNR than using p=1/5.  
 
-```{r XXX}
+```{r test threshold}
 test_2 <- sample.int(1000,500)
 credhalf_2 <- gamlr(credx[-test_2,], default[-test_2], family="binomial")
 predoos_2 <- predict(credhalf_2, credx[test_2,], type="response")
@@ -175,7 +241,19 @@ defaultoos_2 <- default[test_2]
 ```
 
 ```{r XXX}
-# Crear el objeto ROC usando las predicciones y los valores reales
+library(pROC)
+
+# Asegurarse de que los datos estén limpios
+clean_indices <- complete.cases(defaultoos_2, predoos_2)
+defaultoos_2 <- as.vector(defaultoos_2[clean_indices])
+predoos_2 <- as.vector(predoos_2[clean_indices])
+
+# Verificar la longitud de los vectores
+if (length(defaultoos_2) != length(predoos_2)) {
+    stop("Vectors defaultoos_2 and predoos_2 must have the same length.")
+}
+
+# Crear el objeto ROC
 roc_obj_2 <- roc(defaultoos_2, predoos_2)
 
 # Graficar la curva ROC
@@ -214,6 +292,7 @@ legend("bottomright", legend = c("Threshold = 0.5"), col = c("green"), pch = c(1
 
 ```
 
+## Lasso Regularization Path for glmnet (Glass Data)
 ```{r lasso penalization}
 library(glmnet)
 xfgl <- sparse.model.matrix(type~.*RI, data=fgl)[,-1] #Design matrix includes chemical composition variables and all their interactions with refractive index (RI).
@@ -255,3 +334,10 @@ trueclassprobs <- probfgl[cbind(1:n, gtype)]; head(trueclassprobs,n=3); tail(tru
 plot(trueclassprobs ~ gtype, col="lavender", varwidth=TRUE,
 	xlab="glass type", ylab="prob( true class )") 
 ```
+
+## Understanding code above: 
+This code uses Lasso regularization with glmnet to analyze glass types based on chemical composition and refractive index (RI). A multinomial model is trained with cross-validation to optimize the penalty parameter (λ).
+  - Lasso Shrinks Coefficients: Reduces irrelevant coefficients to near-zero, highlighting the most predictive variables.
+  - DeltaBMg Analysis: The difference in Mg coefficients between WinNF and WinF reveals how Mg differentiates glass types (odds ratio via exp). 
+  - Predicted Probabilities: Visualized probabilities for true classes indicate the model’s predictive accuracy across glass types.
+  
