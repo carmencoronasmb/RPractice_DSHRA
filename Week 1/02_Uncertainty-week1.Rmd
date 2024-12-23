@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Setting the data and working directory
 ```{r dataset}
-setwd("/Users/carmencilla/Desktop/Master EUR/Block 2/Data Science and HR Analytics/FEM11213-Coronas/")
+setwd("/Users/carmencilla/Desktop/RPractice_DSHRA")
 browser <- read.csv("Data/web-browsers.csv")
 dim(browser)
 head(browser)
@@ -42,8 +42,10 @@ Treat your sample as a population with size
   sd(mub) #SD: provides variability of the mean estimate. SD now 0. 
 ```
 ## Results from bootstrap without replacement
-  In line with lecture: uncertainty and variance in bootstrap comes bc of the replacement. 
-  "Sampling without replacement would generate no variability across samples." Indeed, SD = 0. 
+  - In line with lecture: uncertainty and variance in bootstrap comes bc of the replacement.   
+  
+  - "Sampling without replacement would generate no variability across samples." Indeed, SD = 0.   
+  
 ```{r frenquentist distribution}
 
 h <- hist(mub) # Create a histogram of the bootstrap sample means 'mub'
@@ -77,6 +79,7 @@ lines(xfit, yfit, col = "black", lwd = 2)
 # - 'col = "black"': Sets the color of the line to black.
 # - 'lwd = 2': Sets the line width to make it thicker for better visibility.
 ```
+
 Note. all mub are the same value. This gives a sqaure as the distribution... With the second command associated to yfit we are re-scaling!! 
 
 
@@ -95,6 +98,7 @@ B <- 1000 # Number of bootstrap iterations
 ```
 
 We are repeating the same bootstrap to check different results. 
+
 ```{r bootstrapping regressions 2}
 
 ##Second try:
@@ -108,6 +112,7 @@ B <- 1000 # Number of bootstrap iterations
 ```
 
 Finally, we are experimenting with a different number of boostrap iterations. 
+
 ```{r bootstrapping regressions 3}
 
 ##Third try:
@@ -122,6 +127,7 @@ B <- 500 # Number of bootstrap iterations
 
 ## Notes from the lecture
 JOINT sampling distribution! Useful to estimate covariances. 
+
 ```{r covariances from bootstrap}
 cov(betas[,"broadband"], betas[,"anychildren"])
 ##Small covariance in this case. 
