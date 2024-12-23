@@ -77,8 +77,10 @@ colMeans(Out)
 ```
 Negative OOS R2. Overfitting: excessively adjusted to IS data, performs poorly in OOS data. 
   
+## Experiment: KFOl K=5
 We repeat KFOLD for K = 5 instead of 10. 
-Step 1- K-fold functions
+
+### Step 1- K-fold functions
 ```{r Step 1 new}
 ## Out of sample prediction experiment
 ## first, define the deviance and R2 functions
@@ -104,7 +106,7 @@ R2_2 <- function(y, pred, family=c("gaussian","binomial")){
 }
 ```
 
-Step 2- K-Fold Partition/Experiment
+### Step 2- K-Fold Partition/Experiment
 ```{r step 2 new}
 # setup the experiment
 n_2 <- nrow(SC) # the number of observations
@@ -127,11 +129,11 @@ for(k in 1:K){
 }
 ```
 
-Step 3- K-Fold Plots
+### Step 3- K-Fold Plots
 ```{r step 3 new}
 boxplot(Out_2, col="plum", ylab="R2")
 ```
-
+### R^2
 ```{r OOS R2 new}
 ## what are the average Out R2?
 colMeans(Out_2)
@@ -140,16 +142,17 @@ colMeans(Out_2)
 In this case, less folds (5) results in a worse adjustment. R2 = -5.7. 
 
 ## Regularization paths
-## Forward Stepwise Regression
+### Forward Stepwise Regression
 ```{r forward stepwise}
 null <- glm(FAIL~1, data=SC)
 fwd <- step(null, scope=formula(full), dir="forward")
 ```
 
-## Conclusions on Forward Stepwise Regression
+### Conclusions on Forward Stepwise Regression
 Computationally intensive. Starts from univariate model, inlcuding covariates one by one (criterion: highest R2). 
 
 ## Graph: sparsity decreases with number of covariates (p)  
+
 ```{r sparsity}
 calculate_sparsity_bound <- function(p, N, alpha) { return(alpha * sqrt(N) / sqrt(p))}#Define a function to calculate the sparsity bound
 
@@ -224,6 +227,7 @@ plot(spender_elastic, xvar = "lambda", label = TRUE)
 title("Elastic Net Regularization Path")
 
 ````
+
 Intuition: Elastic Net selects more variables than Lasso in datasets with high multicollinearity, distributing weights across correlated predictors. In contrast, Lasso is more aggressive in eliminating irrelevant variables by shrinking their coefficients to zero.
 
 
@@ -239,14 +243,15 @@ ridge_model <- glmnet(
 plot(ridge_model, xvar = "lambda", label = TRUE)
 title("Ridge Regularization Path")
 ```
+
 Intuition: Ridge is more suitable when all variables contribute some information and multicollinearity is high. Lasso is better when you believe only a few variables are truly relevant.
 
-## Main intuitions when comparing Lasso, Ridge and Elastic Net for this setup
+### Main intuitions when comparing Lasso, Ridge and Elastic Net for this setup
 - Lasso: For strict variable selection. 
 - Ridge: To stabilize coefficients when multicollinearity is present. ç
 - Elastic Net: A balance between Lasso and Ridge, useful in cases of multicollinearity and dispersion. 
 
-## Sample of 10 coefficients: comparison
+### Sample of 10 coefficients: comparison
 ```{r comparison}
 # Seleccionar un subconjunto de coeficientes (por ejemplo, los primeros 10)
 num_coeff <- 10  # Número de coeficientes a comparar
