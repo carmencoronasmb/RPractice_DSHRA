@@ -31,3 +31,5 @@
   ### Issues
   - KNN: Results are highly sensitive to sample selection and k values.
   - Challenges with overlapping data distributions that impact model accuracy.
+
+ ### Technical issue when knitting this week because of source(Roc.C). 
