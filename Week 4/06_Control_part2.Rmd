@@ -1,0 +1,311 @@
+---
+title: "06_Controls_part2"
+author: "Carmen Coronas"
+output: html_document
+date: "November 2024"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Orthogonal ML for LTE. Abortion example.
+
+```{r setup ML}
+library(Matrix)
+data <- read.table("/Users/carmencilla/Desktop/RPractice_DSHRA/Data/abortion.dat", skip=1, sep="\t")
+names(data) <- c("state","year","pop","y_viol","y_prop","y_murd",
+	"a_murd","a_viol","a_prop",'prison','police',
+	'ur','inc','pov','afdc','gun','beer')
+data <- data[!(data$state%in%c(2,9,12)),] # AK, DC, HA are strange places
+data <- data[data$year>84 & data$year<98,] # incomplete data outside these years
+data$pop <- log(data$pop)
+t <- data$year - 85
+s <- factor(data$state) ## states are numbered alphabetically
+controls <- data.frame(data[,c(3,10:17)])
+## y is de-trended log crime rate, a is as described below
+## note we also have violent and property crime versions
+y <- data$y_murd
+d <- data$a_murd
+cell <- read.csv("/Users/carmencilla/Desktop/RPractice_DSHRA/Data/us_cellphone.csv")
+cellrate <- 5*cell[,2]/(1000*cell[,3]) # center on 1985 and scale by 1997-1985
+phone <- cellrate[ t + 1 ]
+t <- factor(t)
+sna <- factor(s, levels=c(NA,levels(s)), exclude=NULL)
+x <- sparse.model.matrix( ~ t + phone*sna + .^2, data=controls)[,-1]
+```
+
+```{r setting data for orthogonal}
+library(AER)
+library(gamlr)
+
+dreg <- function(x,d){ cv.gamlr(x, d, lmr=1e-5) }
+yreg <- function(x,y){ cv.gamlr(x, y, lmr=1e-5) }
+```
+
+```{r orthogonal ml}
+# Orthogonal ML R Function
+
+orthoLTE <- function(x, d, y, dreg, yreg, nfold=2)
+{
+	# randomly split data into folds
+	nobs <- nrow(x)
+    foldid <- rep.int(1:nfold, 
+    	times = ceiling(nobs/nfold))[sample.int(nobs)]
+    I <- split(1:nobs, foldid)
+    # create residualized objects to fill
+	ytil <- dtil <- rep(NA, nobs)
+	# run OOS orthogonalizations
+	cat("fold: ")
+	for(b in 1:length(I)){
+		dfit <- dreg(x[-I[[b]],], d[-I[[b]]])
+		yfit <- yreg(x[-I[[b]],], y[-I[[b]]])
+		dhat <- predict(dfit, x[I[[b]],], type="response")
+		yhat <- predict(yfit, x[I[[b]],], type="response")
+		dtil[I[[b]]] <- drop(d[I[[b]]] - dhat)
+		ytil[I[[b]]] <- drop(y[I[[b]]] - yhat)
+		cat(b," ")
+	}
+	rfit <- lm(ytil ~ dtil)
+	gam <- coef(rfit)[2]
+	se <- sqrt(vcovHC(rfit)[2,2])
+	cat(sprintf("\ngamma (se) = %g (%g)\n", gam, se))
+
+	return( list(gam=gam, se=se, dtil=dtil, ytil=ytil) )
+}
+```
+
+```{r effects}
+# OrthoML and effect of abortion access on crime
+
+resids <- orthoLTE( x=x, d=d, y=y, 
+				dreg=dreg, yreg=yreg, nfold=5) 
+head(resids$dtil)
+head(resids$ytil)
+2*pnorm(-abs(resids$gam)/resids$se) #p-value supports no effect of abortion access on crime
+```
+
+## Interpretation of the code above
+Similar as I did in Controls part 1, I interacted with ChatGPT to extract insights from the code and accurate explainations. Main findings and conclusions (edited version from ChatGPT prompts):   
+
+  - Data Preparation: The dataset includes detrended log crime rates (y), abortion rates (d), and control variables such as income, gun laws, and population. Interaction terms are created for state and year using sparse.model.matrix. Cellphone adoption rates (phone) are also calculated as an additional control variable.   
+  
+  - Orthogonal ML Functions: Two functions, dreg and yreg, are defined using cv.gamlr for variable selection and regularization. These functions help in predicting residualized versions of the treatment (d) and outcome (y).     
+  
+  - Orthogonal ML Process: The orthoLTE function implements Orthogonal Machine Learning (ML) for Linear Treatment Effects (LTE). It splits the data into folds, fits models for treatment and outcome predictions, and calculates residualized versions of both (dtil and ytil). A linear regression is then used to estimate the causal effect (gamma) and its standard error (se).     
+  
+  - Effect of Abortion on Crime: The orthoLTE function is applied to evaluate the causal impact of abortion rates on crime. The residualized treatment and outcome values are analyzed, and a p-value is calculated. Results suggest no significant effect of abortion access on crime rates.   
+  
+  - In conclusion, this approach combines regularization techniques with orthogonalization to isolate causal effects in the presence of confounding variables.
+
+## HTE. Consumer demand: beer example. 
+```{r dominicks data}
+load("/Users/carmencilla/Desktop/RPractice_DSHRA/Data/dominicks-beer.rda")
+head(wber)
+```
+
+```{r head}
+wber = wber[sample(nrow(wber), 100000), ]
+head(upc)
+```
+
+```{r}
+dim(upc)
+```
+
+```{r uniform prices}
+wber$lp <- log(12*wber$PRICE/upc[wber$UPC,"OZ"]) #ln price per 12 ounces
+```
+
+```{r elasticity}
+coef( margfit <- lm(log(MOVE) ~ lp, data=wber[,]) )
+```
+
+```{r extracting words}
+wber$s <- factor(wber$STORE); wber$u <- factor(wber$UPC); wber$w <- factor(wber$WEEK)
+xs <- sparse.model.matrix( ~ s-1, data=wber); xu <- sparse.model.matrix( ~ u-1, data=wber); xw <- sparse.model.matrix( ~ w-1, data=wber)
+# parse the item description text as a bag o' words
+
+library(tm)
+descr <- Corpus(VectorSource(as.character(upc$DESCRIP)))
+descr <- DocumentTermMatrix(descr)
+descr <- sparseMatrix(i=descr$i,j=descr$j,x=as.numeric(descr$v>0), # convert from stm to Matrix format
+              dims=dim(descr),dimnames=list(rownames(upc),colnames(descr)))
+descr[1:5,1:6]
+```
+
+```{r controls}
+controls <- cbind(xs, xu, xw, descr[wber$UPC,]) 
+dim(controls)
+```
+
+```{r naive lasso}
+# naive lasso
+naivefit <- gamlr(x=cbind(lp=wber$lp,controls)[,], y=log(wber$MOVE), free=1, standardize=FALSE)
+print( coef(naivefit)[1:2,] )
+```
+```{r orthoML beer}
+# orthogonal ML 
+resids <- orthoLTE( x=controls, d=wber$lp, y=log(wber$MOVE), dreg=dreg, yreg=yreg, nfold=5)
+```
+
+## Interpretation of the code above: 
+
+  - Data Preparation: The dataset includes weekly beer sales (wber) and product details (upc). The data is subsampled for analysis, and a new variable lp (log price per 12 ounces) is computed using price and product size.   
+  
+  - Elasticity Estimation: A linear regression estimates the elasticity of demand for beer, modeling log(MOVE) (logarithm of units sold) as a function of lp.   
+  
+  - Feature Engineering: Sparse matrices are created for store, product (UPC), and week effects (xs, xu, xw). Product descriptions are processed as a "bag of words" using text mining (tm) and converted into a sparse matrix (descr).   
+  
+  - Controls Matrix: A combined matrix (controls) is constructed, including store, product, week, and parsed text features for detailed modeling.   
+  
+  - Naive Lasso: A Lasso regression model (gamlr) is applied to predict sales (log(MOVE)) using lp and the controls matrix. The model identifies key predictors while penalizing less relevant features.   
+  
+  - Orthogonal ML: The orthogonal ML approach (orthoLTE) is used to estimate the treatment effect of lp (log price) on log(MOVE), accounting for confounding factors in the controls. This approach provides a robust estimation of price elasticity.
+  
+
+## Example Oregon Experiment
+```{r OregonHIE}
+# person_id  is key
+# treatment is in Description file, and is random conditional on the numhh_list (number of names in lottery)
+# in 2008 new spots opened for medicaid, which was previously closed to new enroll
+# we are interested in health insurance effect on increased costs and utilization (on health is longer term)
+# admin data is clean, survey data no necessarily balanced due to non-response bias
+# admin data has hospital admission (by dept, emerg itself is non-signif)
+# we can also look at number of hostpital days or total list cost
+
+library(foreign)
+
+descr <- read.dta("/Users/carmencilla/Desktop/Data/oregonhie_descriptive_vars.dta")
+prgm <- read.dta("/Users/carmencilla/Desktop/Data/oregonhie_stateprograms_vars.dta")
+s12 <- read.dta("/Users/carmencilla/Desktop/Data/oregonhie_survey12m_vars.dta")
+
+# nicely organized, one row per person
+all(s12$person_id == descr$person_id)
+all(s12$person_id == prgm$person_id)
+
+P <- descr[,c("person_id","household_id", "numhh_list")]
+P$medicaid <- as.numeric(prgm[,"ohp_all_ever_firstn_30sep2009"]=="Enrolled")
+P$selected <- as.numeric(descr[,"treatment"]=="Selected")
+levels(P$numhh_list) <- c("1","2","3+")
+
+# 12 month is the survey that really matters
+# need to control for household size interacted with survey return time
+Y <- s12[,c("weight_12m",
+	"doc_any_12m","doc_num_mod_12m",
+	"er_any_12m","er_num_mod_12m",
+	"hosp_any_12m","hosp_num_mod_12m")]
+Y$doc_any_12m <- as.numeric(Y$doc_any_12m=="Yes")
+Y$er_any_12m <- as.numeric(Y$er_any_12m=="Yes")
+Y$hosp_any_12m <- as.numeric(Y$hosp_any_12m=="Yes")
+
+# smk_ever_12m - num19_12m are sources of heterogeneity, plus descr
+X <- s12[,121:147]
+X$dt_returned <- factor(format(s12$dt_returned_12m, "%Y-%m"))
+
+insurv <- which(s12$sample_12m_resp == "12m mail survey responder")
+X <- X[insurv,]
+Y <- Y[insurv,]
+P <- P[insurv,]
+
+sapply(Y,function(y) sum(is.na(y)))
+nomiss <- which( !apply(Y,1, function(y) any(is.na(y))) )
+X <- X[nomiss,]
+Y <- Y[nomiss,]
+P <- P[nomiss,]
+
+# pull out the weights and attach doc_any to P
+weights <- Y[,1]
+Y <- Y[,-1]
+
+# replace some ridiculous values in survey and drop num19
+X$hhsize_12m[X$hhsize_12m>10] <- 10
+X$num19_12m <- NULL
+
+# organize to make it pretty for text
+P$doc_any_12m <- Y$doc_any_12m # you can explore other responses if you want
+P <- P[,c(1,2,6,5,4,3)]
+names(P)[6] <- "numhh"
+```
+
+```{r}
+# data has been cleaned in the background
+head(P,n=3)
+dim(P)
+table(P$selected)
+```
+
+```{r average effects}
+ybar <- tapply(P$doc_any_12m, P$selected, mean)
+( ATE = ybar['1'] - ybar['0'] )
+
+nsel <- table(P[,c("selected")])
+yvar <- tapply(P$doc_any_12m, P$selected, var)
+( seATE = sqrt(sum(yvar/nsel)) )
+
+ATE + c(-2,2)*seATE
+```
+
+```{r}
+lin <- glm(doc_any_12m ~ selected + numhh, data=P);
+round( summary(lin)$coef["selected",],4) # 6-7% increase in prob
+```
+
+Handling missings
+```{r}
+levels(X$edu_12m)
+    source("/Users/carmencilla/Desktop/RPractice_DSHRA/Week 4/naref.R")
+    levels(naref(X$edu_12m))
+    X <- naref(X) #makes NA the base group
+
+xnum <- X[,sapply(X,class)%in%c("numeric","integer")]
+xnum[66:70,]
+colSums(is.na(xnum))
+# flag missing
+xnumna <- apply(is.na(xnum), 2, as.numeric)
+xnumna[66:70,]  
+
+# impute the missing values
+mzimpute <- function(v){ 
+	if(mean(v==0,na.rm=TRUE) > 0.5) impt <- 0
+	else impt <- mean(v, na.rm=TRUE)
+	v[is.na(v)] <- impt
+	return(v) }
+xnum <- apply(xnum, 2,  mzimpute)
+xnum[66:70,]
+
+# replace/add the variables in new data frame 
+for(v in colnames(xnum)){
+	X[,v] <- xnum[,v]
+	X[,paste(v,"NA", sep=".")] <- xnumna[,v] }
+X[144:147,]
+```
+
+Introduce everything to estimate HTE. 
+```{r}
+xhte <- sparse.model.matrix(~., data=cbind(numhh=P$numhh, X))[,-1]
+xhte[1:2,1:4]
+dim(xhte)
+```
+
+```{r}
+dxhte <- P$selected*xhte
+colnames(dxhte) <- paste("d",colnames(xhte), sep=".")
+htedesign <- cbind(xhte,d=P$selected,dxhte)
+# include the numhh controls and baseline treatment without penalty 
+htefit <- gamlr(x=htedesign, y=P$doc_any_12m, free=c("numhh2","numhh3+","d"))
+gam <- coef(htefit)[-(1:(ncol(xhte)+1)), ]
+round(sort(gam)[1:6],4)
+round(sort(gam, decreasing=TRUE)[1:6],4)
+```
+## Interpretation of the code above
+
+  - Data Description and Preparation: The dataset examines the impact of Medicaid access (randomly assigned through a lottery) on healthcare utilization. Key variables include survey responses about doctor visits, emergency room visits, and hospital admissions. The data is cleaned to handle missing values, control for household size, and account for survey response bias. 
+  
+  - Average Treatment Effect (ATE): The ATE of Medicaid access on the probability of visiting a doctor is computed. The result shows a 6-7% increase in probability for those selected in the lottery, with standard errors calculated to estimate confidence intervals.   
+  
+  - Handling Missing Data: Missing values are imputed using a function that assigns zeros for sparse data or the mean otherwise. A flag is added for variables where imputation occurred, ensuring transparency in the modeling process.   
+  
+  - Heterogeneous Treatment Effects (HTE): Interaction terms for treatment (selected) and covariates are constructed to study HTE. The gamlr package is used to estimate effects, with penalization applied selectively to control variables. Key features driving treatment effects are identified by sorting the coefficients.
+  
+  
